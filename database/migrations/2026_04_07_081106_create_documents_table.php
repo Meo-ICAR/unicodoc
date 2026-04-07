@@ -19,7 +19,7 @@ return new class extends Migration {
             $table->uuid('documentable_id');
 
             // Categorizzazione
-            $table->unsignedInteger('document_type_id')->nullable()->comment('FK Tipo di documento');
+            $table->unsignedBigInteger('document_type_id')->nullable()->comment('FK Tipo di documento');
             $table->string('name', 255)->nullable()->comment('Titolo logico del documento');
             $table->string('docnumber', 255)->nullable()->comment('Numero protocollo/documento');
             $table->string('spatie_collection', 100)->default('default')->comment('Nome della collection Spatie');
@@ -65,6 +65,10 @@ return new class extends Migration {
             $table->unsignedBigInteger('verified_by')->nullable()->comment('Admin che ha verificato');
             $table->timestamp('verified_at')->nullable()->comment('Data verifica');
 
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
+
             // Timestamps e SoftDeletes
             $table->string('file_hash', 64)->nullable()->comment('SHA-256 per prevenire duplicati');
             $table->timestamps();
@@ -77,11 +81,8 @@ return new class extends Migration {
             $table->index('status', 'doc_status_index');
 
             // Foreign Keys
-            $table->foreign('company_id')->references('id')->on('companies')->onDelete('set null');
+            // Nota: le tabelle companies e users sono su connessione 'bpm', quindi non hanno foreign keys
             $table->foreign('document_type_id')->references('id')->on('document_types')->onDelete('restrict');
-            $table->foreign('uploaded_by')->references('id')->on('users')->onDelete('set null');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
-            $table->foreign('verified_by')->references('id')->on('users')->onDelete('set null');
         });
     }
 

@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Wildside\Userstamps\HasUserstamps;
+//use Wildside\Userstamps\HasUserstamps;
+use Mattiverse\Userstamps\Traits\Userstamps;
 
 class DocumentType extends Model
 {
-    use SoftDeletes, HasUserstamps;
+    use SoftDeletes, Userstamps;
 
     protected $fillable = [
         'name',

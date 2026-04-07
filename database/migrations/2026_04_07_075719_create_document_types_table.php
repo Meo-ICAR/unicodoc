@@ -39,10 +39,12 @@ return new class extends Migration {
             $table->boolean('is_AiAbstract')->default(0)->comment('Ask AI to make abstract');
             $table->boolean('is_AiCheck')->default(0)->comment('AI conformity required');
             $table->text('AiPattern')->nullable()->comment('How AI can detect document is of this type');
+            // Tracciamento Utenti (Audit)
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->unsignedBigInteger('deleted_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
-            $table->userstamps();
-            $table->softUserstamps();
         });
     }
 

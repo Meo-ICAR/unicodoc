@@ -11,11 +11,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
-use Wildside\Userstamps\HasUserstamps;
+//use Wildside\Userstamps\HasUserstamps;
+//use Mattiverse\Userstamps\Traits\Userstamps;
+
 
 class Document extends Model implements HasMedia
 {
-    use SoftDeletes, HasUserstamps, InteractsWithMedia;
+    use SoftDeletes, InteractsWithMedia;
 
     protected $keyType = 'string';
     public $incrementing = false;

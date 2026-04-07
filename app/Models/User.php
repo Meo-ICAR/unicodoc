@@ -22,7 +22,7 @@ use Illuminate\Support\Collection;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, FilamentUser, HasAvatar, HasTenants;
+    use HasFactory, Notifiable;
 
     protected $connection = 'bpm';
 

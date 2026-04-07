@@ -12,14 +12,18 @@ enum DocumentStatus: string implements HasLabel, HasColor, HasIcon
     case VERIFIED = 'verified';
     case REJECTED = 'rejected';
     case EXPIRED = 'expired';
+    case REVOKED = 'revoked';
+    case PENDING = 'pending';
 
     public function getLabel(): ?string
     {
         return match ($this) {
-            self::UPLOADED => 'Da Verificare',
+            self::UPLOADED => 'Caricato',
             self::VERIFIED => 'Approvato',
             self::REJECTED => 'Rifiutato',
             self::EXPIRED => 'Scaduto',
+            self::REVOKED => 'Revocato',
+            self::PENDING => 'In attesa',
         };
     }
 
@@ -30,6 +34,8 @@ enum DocumentStatus: string implements HasLabel, HasColor, HasIcon
             self::VERIFIED => 'success',  // Mostra un badge verde in Filament
             self::REJECTED => 'danger',  // Mostra un badge rosso in Filament
             self::EXPIRED => 'gray',  // Mostra un badge grigio in Filament
+            self::REVOKED => 'gray',  // Mostra un badge grigio in Filament
+            self::PENDING => 'warning',
         };
     }
 
@@ -40,6 +46,8 @@ enum DocumentStatus: string implements HasLabel, HasColor, HasIcon
             self::VERIFIED => 'heroicon-m-check-badge',
             self::REJECTED => 'heroicon-m-x-circle',
             self::EXPIRED => 'heroicon-m-exclamation-triangle',
+            self::REVOKED => 'heroicon-m-x-circle',
+            self::PENDING => 'heroicon-m-clock',
         };
     }
 }
