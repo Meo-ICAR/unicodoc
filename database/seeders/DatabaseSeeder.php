@@ -16,6 +16,10 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        $this->call(DocumentTypeSeeder::class);
+        $this->call([
+            DocumentScopeSeeder::class,
+            DocumentStatusSeeder::class,
+            DocumentTypeSeeder::class,
+        ]);
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Documents\Tables;
 
+use App\Enums\DocumentStatus;
+use App\Enums\SyncStatus;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -9,12 +11,10 @@ use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
-use App\Enums\DocumentStatus;
-use App\Enums\SyncStatus;
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\Filter;
 use Illuminate\Database\Eloquent\Builder;
 
 class DocumentsTable
@@ -23,48 +23,146 @@ class DocumentsTable
     {
         return $table
             ->columns([
-                TextColumn::make('id')
+                // ── Identificazione ───────────────────────────────────────────
+                TextColumn::make('name')
+                    ->label('Documento')
+                    ->searchable()
                     ->sortable()
-                    ->searchable(),
+                    ->weight('semibold')
+                    ->description(fn ($record): string => $record->docnumber ?? ''),
 
-                // Filament 3+ renderizza automaticamente il badge se l'enum ha l'attributo/interfaccia HasColor/HasIcon
+                TextColumn::make('documentType.name')
+                    ->label('Tipo')
+                    ->badge()
+                    ->color('gray')
+                    ->searchable()
+                    ->sortable(),
+
+                // ── Stato con badge colorato dall'Enum ────────────────────────
                 TextColumn::make('status')
                     ->label('Stato')
                     ->badge()
                     ->sortable(),
 
                 TextColumn::make('sync_status')
-                    ->label('Stato Sincronizzazione Webhook')
+                    ->label('Webhook')
                     ->badge()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
+
+                // ── Date ──────────────────────────────────────────────────────
+                TextColumn::make('emitted_at')
+                    ->label('Emesso il')
+                    ->date('d/m/Y')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('expires_at')
                     ->label('Scadenza')
                     ->date('d/m/Y')
-                    ->sortable(),
+                    ->sortable()
+                    // Colora in rosso i documenti scaduti, giallo quelli in prossima scadenza
+                    ->color(fn ($record) => match (true) {
+                        $record->expires_at === null                        => null,
+                        $record->expires_at->isPast()                      => 'danger',
+                        $record->expires_at->diffInDays(now()) <= 30       => 'warning',
+                        default                                             => null,
+                    }),
 
+                // ── Flag compatti ─────────────────────────────────────────────
+                IconColumn::make('is_signed')
+                    ->label('Firmato')
+                    ->boolean()
+                    ->alignCenter()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                IconColumn::make('is_template')
+                    ->label('Template')
+                    ->boolean()
+                    ->trueColor('warning')
+                    ->alignCenter()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                // ── AI Confidence Score ───────────────────────────────────────
+                TextColumn::make('ai_confidence_score')
+                    ->label('AI Score')
+                    ->numeric()
+                    ->suffix('%')
+                    ->alignCenter()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                // ── Timestamps ────────────────────────────────────────────────
                 TextColumn::make('created_at')
+                    ->label('Caricato il')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('updated_at')
+                    ->label('Aggiornato il')
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+
+            ->defaultSort('created_at', 'desc')
+
             ->filters([
-                // Filtro standard a discesa basato sull'enum
+                // Filtro per stato documento
                 SelectFilter::make('status')
-                    ->label('Filtra per Stato')
+                    ->label('Stato documento')
                     ->options(DocumentStatus::class),
 
-                // Filtro custom per i documenti in scadenza (es. nei prossimi 30 giorni) o scaduti
+                // Filtro per stato webhook
+                SelectFilter::make('sync_status')
+                    ->label('Stato webhook')
+                    ->options(SyncStatus::class),
+
+                // Filtro per tipo documento
+                SelectFilter::make('document_type_id')
+                    ->label('Tipo documento')
+                    ->relationship('documentType', 'name')
+                    ->searchable()
+                    ->preload(),
+
+                // Filtro: documenti in scadenza entro 30 giorni
                 Filter::make('expiring_soon')
-                    ->label('In Scadenza (30 gg)')
+                    ->label('In scadenza (30 gg)')
                     ->toggle()
                     ->query(fn (Builder $query): Builder => $query
                         ->whereNotNull('expires_at')
                         ->where('expires_at', '<=', now()->addDays(30))
                         ->where('expires_at', '>=', now())
                     ),
+
+                // Filtro: documenti già scaduti
+                Filter::make('expired')
+                    ->label('Scaduti')
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query
+                        ->whereNotNull('expires_at')
+                        ->where('expires_at', '<', now())
+                    ),
+
+                // Filtro: firma richiesta/presente
+                Filter::make('is_signed')
+                    ->label('Firmati')
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->where('is_signed', true)),
+
+                TrashedFilter::make(),
             ])
-            ->actions([])
-            ->bulkActions([]);
+
+            ->recordActions([
+                EditAction::make(),
+            ])
+
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    ForceDeleteBulkAction::make(),
+                    RestoreBulkAction::make(),
+                ]),
+            ]);
     }
- }
+}

@@ -1,0 +1,111 @@
+<?php
+
+namespace App\Filament\Resources\Documents;
+
+use App\Filament\Resources\Documents\Pages\CreateDocument;
+use App\Filament\Resources\Documents\Pages\EditDocument;
+use App\Filament\Resources\Documents\Pages\ListDocuments;
+use App\Filament\Resources\Documents\Schemas\DocumentForm;
+use App\Filament\Resources\Documents\Tables\DocumentsTable;
+use App\Models\Document;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+
+class DocumentResource extends Resource
+{
+    protected static ?string $model = Document::class;
+
+    // ── Navigazione ──────────────────────────────────────────────────────────
+    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+
+    protected static ?string $navigationGroup = 'Gestione Documenti';
+
+    protected static ?int $navigationSort = 1;
+
+    protected static ?string $navigationLabel = 'Documenti';
+
+    // ── Label modello ────────────────────────────────────────────────────────
+    protected static ?string $modelLabel = 'Documento';
+
+    protected static ?string $pluralModelLabel = 'Documenti';
+
+    // ── Slug URL ─────────────────────────────────────────────────────────────
+    protected static ?string $slug = 'documents';
+
+    // ── Record title (usato nei breadcrumb e nelle relazioni) ────────────────
+    protected static ?string $recordTitleAttribute = 'name';
+
+    // ── Multi-tenancy: scoping automatico per company ────────────────────────
+    protected static ?string $tenantOwnershipRelationshipName = 'company';
+
+    // ── Ricerca globale ──────────────────────────────────────────────────────
+    public static function getGloballySearchableAttributes(): array
+    {
+        return ['name', 'docnumber', 'documentable_type', 'emitted_by'];
+    }
+
+    public static function getGlobalSearchResultDetails(Model $record): array
+    {
+        return [
+            'Tipo' => $record->documentType?->name ?? '—',
+            'Stato' => $record->status?->getLabel() ?? '—',
+            'Azienda' => $record->company?->name ?? '—',
+        ];
+    }
+
+    // ── Badge conteggio in navigazione (documenti in attesa) ─────────────────
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::where('status', 'pending')
+            ->orWhere('status', 'uploaded')
+            ->count() ?: null;
+    }
+
+    public static function getNavigationBadgeColor(): ?string
+    {
+        return 'warning';
+    }
+
+    // ── Form ─────────────────────────────────────────────────────────────────
+    public static function form(Schema $schema): Schema
+    {
+        return DocumentForm::configure($schema);
+    }
+
+    // ── Table ────────────────────────────────────────────────────────────────
+    public static function table(Table $table): Table
+    {
+        return DocumentsTable::configure($table);
+    }
+
+    // ── Relations ────────────────────────────────────────────────────────────
+    public static function getRelations(): array
+    {
+        return [
+            // Futuro: MediaRelationManager per gestire allegati multipli
+        ];
+    }
+
+    // ── Pages ────────────────────────────────────────────────────────────────
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListDocuments::route('/'),
+            'create' => CreateDocument::route('/create'),
+            'edit' => EditDocument::route('/{record}/edit'),
+        ];
+    }
+
+    // ── Eloquent: withTrashed per route binding ───────────────────────────────
+    public static function getRecordRouteBindingEloquentQuery(): Builder
+    {
+        return parent::getRecordRouteBindingEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
+    }
+}
