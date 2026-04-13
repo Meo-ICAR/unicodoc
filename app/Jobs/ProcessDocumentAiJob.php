@@ -95,7 +95,7 @@ class ProcessDocumentAiJob implements ShouldQueue
     {
         // Esempio: Recuperiamo l'URL del webhook dal tenant/company, oppure dall'ENV o da configs.
         // Assumo una relazione come: $this->document->company->webhook_url
-        $webhookUrl = $this->document->company->webhook_url ?? config('services.calling_app.webhook_url');
+        $webhookUrl = $this->document->company?->webhook_url ?? config('services.calling_app.webhook_url');
 
         if (!$webhookUrl) {
             Log::warning('Nessun URL Webhook trovato per notifica su documento: ' . $this->document->id);
@@ -110,23 +110,33 @@ class ProcessDocumentAiJob implements ShouldQueue
         ];
 
         // L'utilizzo di `timeout(10)` e `retry(3, 200)` rende questo request incredibilmente robusto
-        $response = Http::timeout(10)
-            ->retry(3, 200) // Riprova 3 volte, aspettando 200ms
-            ->withHeaders([
-                // Possibile utilizzo di signature HMAC per sicurezza (es. X-Signature)
-                'X-DMS-Signature' => hash_hmac('sha256', json_encode($payload), config('app.key')),
-            ])
-            ->post($webhookUrl, $payload);
+        try {
+            $response = Http::timeout(10)
+                ->retry(3, 200) // Riprova 3 volte, aspettando 200ms
+                ->withHeaders([
+                    // Possibile utilizzo di signature HMAC per sicurezza (es. X-Signature)
+                    'X-DMS-Signature' => hash_hmac('sha256', json_encode($payload), config('app.key')),
+                ])
+                ->post($webhookUrl, $payload);
 
-        // Aggiorna lo status del Webhook a seconda del successo o meno
-        $this->document->update([
-            'sync_status' => $response->successful() ? SyncStatus::SYNCED : SyncStatus::FAILED,
-        ]);
+            // Aggiorna lo status del Webhook a seconda del successo o meno
+            $this->document->update([
+                'sync_status' => $response->successful() ? SyncStatus::SYNCED : SyncStatus::FAILED,
+            ]);
 
-        if ($response->failed()) {
+            if ($response->failed()) {
+                Log::error("Webhook fallito per il doc: {$this->document->id}", [
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+            }
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $this->document->update([
+                'sync_status' => SyncStatus::FAILED,
+            ]);
+
             Log::error("Webhook fallito per il doc: {$this->document->id}", [
-                'status' => $response->status(),
-                'response' => $response->body()
+                'error' => $e->getMessage()
             ]);
         }
     }

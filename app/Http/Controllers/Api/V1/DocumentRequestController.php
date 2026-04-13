@@ -18,7 +18,7 @@ class DocumentRequestController extends Controller
             'required_codes' => 'required|array',
             'sender_email' => 'nullable|email',
             'bpm_task_id' => 'nullable|string',
-            'expires_in_days' => 'integer|default:7',
+            'expires_in_days' => 'nullable|integer',
         ]);
 
         // Recuperiamo gli ID reali dei tipi di documento
@@ -33,8 +33,8 @@ class DocumentRequestController extends Controller
             'id' => Str::uuid(),  // Genera l'UUID per il link
             'documentable_type' => $validated['documentable_type'],
             'documentable_id' => $validated['documentable_id'],
-            'sender_email' => $validated['sender_email'],
-            'bpm_task_id' => $validated['bpm_task_id'],
+            'sender_email' => $validated['sender_email'] ?? null,
+            'bpm_task_id' => $validated['bpm_task_id'] ?? null,
             'expires_at' => now()->addDays($request->input('expires_in_days', 7)),
         ]);
 

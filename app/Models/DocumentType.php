@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 // use Wildside\Userstamps\HasUserstamps;
@@ -9,7 +10,7 @@ use Mattiverse\Userstamps\Traits\Userstamps;
 
 class DocumentType extends Model
 {
-    use SoftDeletes, Userstamps;
+    use HasFactory, SoftDeletes, Userstamps;
 
     protected $fillable = [
         'name',
@@ -113,7 +114,8 @@ class DocumentType extends Model
         }
 
         $retentionDate = $this->getRetentionDate($documentDate);
-        return $retentionDate ? $retentionDate->diffInDays(now(), false) : null;
+        // Restituisce giorni rimanenti positivi (negativo se già scaduto)
+        return $retentionDate ? (int) now()->diffInDays($retentionDate, false) : null;
     }
 
     public function shouldNotify($documentDate): array
@@ -125,9 +127,11 @@ class DocumentType extends Model
             return [];
         }
 
-        return array_filter($notifyDays, function ($days) use ($daysUntilExpiry) {
-            return $daysUntilExpiry <= $days;
-        });
+        // Attivo se mancano ancora almeno $days giorni (cioè $days <= $daysUntilExpiry)
+        // Esempio: mancano 10 giorni → [30,7] → 30 > 10 (non attivo), 7 <= 10 (attivo) → [7]
+        return array_values(array_filter($notifyDays, function ($days) use ($daysUntilExpiry) {
+            return $days <= $daysUntilExpiry;
+        }));
     }
 
     public function scopeWithAutoVerification($query)

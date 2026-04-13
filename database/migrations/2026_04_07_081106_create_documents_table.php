@@ -28,6 +28,8 @@ return new class extends Migration {
             // Stati (Enum)
             $table->string('status', 50)->default('uploaded')->comment('Enum: uploaded, verified, rejected, expired');
             $table->string('sync_status', 50)->default('local')->comment('Enum: local, syncing, synced, failed');
+            $table->string('status_code', 50)->nullable()->comment('Stato classificazione: DA VERIFICARE, IN VERIFICA, OK, RICHIESTA INFO');
+            $table->text('annotation')->nullable()->comment('Annotazione classificazione automatica');
 
             $table->string('source_app')->default('local')->comment('Applicazione di origine (local, sharepoint, etc)');
             // SharePoint Integrazione

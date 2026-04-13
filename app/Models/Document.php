@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\DocumentStatus;
 use App\Enums\SyncStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -17,7 +18,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 
 class Document extends Model implements HasMedia
 {
-    use SoftDeletes, InteractsWithMedia;
+    use HasFactory, SoftDeletes, InteractsWithMedia;
 
     protected $keyType = 'string';
     public $incrementing = false;
@@ -57,6 +58,8 @@ class Document extends Model implements HasMedia
         'verified_by',
         'verified_at',
         'file_hash',
+        'status_code',
+        'annotation',
     ];
 
     protected $casts = [
@@ -90,7 +93,7 @@ class Document extends Model implements HasMedia
 
     public function company(): BelongsTo
     {
-        return $this->belongsTo(Company::class);
+        return $this->belongsTo(\App\Models\BPM\Company::class);
     }
 
     public function documentType(): BelongsTo

@@ -4,9 +4,11 @@ namespace App\Services\Mail;
 
 use App\Events\DocumentUploaded;
 use App\Models\Document;
+use App\Models\DocumentRequest;
 use App\Models\MailAttachment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class MailAttachmentProcessor
 {
@@ -39,7 +41,7 @@ class MailAttachmentProcessor
             ->update(['is_processed' => true]);
     }
 
-    protected function shouldSkip(MailAttachment $attachment): bool
+    public function shouldSkip(MailAttachment $attachment): bool
     {
         // 1. Skip per estensione/MIME
         if (in_array($attachment->mime_type, $this->blacklistedMimes)) {
@@ -66,7 +68,11 @@ class MailAttachmentProcessor
 
             // 1. Creiamo il record Document (Ancora "DA VERIFICARE")
             $document = Document::create([
+                'id' => Str::uuid()->toString(),
+                'documentable_type' => 'App\\Models\\BPM\\Client',
+                'documentable_id' => Str::uuid()->toString(),
                 'name' => $attachment->filename,
+                'status' => \App\Enums\DocumentStatus::UPLOADED,
                 'status_code' => 'DA VERIFICARE',  // Stato iniziale
                 'source_app' => 'email',
                 // Arricchiamo l'AI passando Oggetto e Mittente come metadati!
@@ -97,7 +103,7 @@ class MailAttachmentProcessor
     /**
      * Tenta di associare la mail a una richiesta documenti aperta.
      */
-    protected function findActiveRequestForMessage($message): ?DocumentRequest
+    public function findActiveRequestForMessage($message): ?DocumentRequest
     {
         // A. Tentativo 1: Cerchiamo un Tag nell'oggetto (es: [Ref: a1b2c3d4])
         if (preg_match('/\[Ref:\s*([a-f0-9\-]+)\]/i', $message->subject, $matches)) {

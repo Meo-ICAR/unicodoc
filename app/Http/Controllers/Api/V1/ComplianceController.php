@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\DocumentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Document;
 use App\Models\DocumentType;
@@ -15,7 +16,7 @@ class ComplianceController extends Controller
         $validated = $request->validate([
             'documentable_type' => 'required|string',
             'documentable_id' => 'required',
-            'required_codes' => 'required|array',
+            'required_codes' => 'required|array|min:1',
             'required_codes.*' => 'string',
         ]);
 
@@ -23,7 +24,7 @@ class ComplianceController extends Controller
 
         // 2. Recuperiamo i documenti dell'entità che corrispondono ai codici richiesti
         // Ordiniamo per data di creazione discendente per prendere sempre il più recente
-        $documents = Document::with(['documentType', 'status'])
+        $documents = Document::with(['documentType'])
             ->where('documentable_type', $validated['documentable_type'])
             ->where('documentable_id', $validated['documentable_id'])
             ->whereHas('documentType', function ($query) use ($requiredCodes) {
@@ -49,19 +50,22 @@ class ComplianceController extends Controller
             // Prendiamo il documento più recente per questo codice
             $latestDoc = $documents->get($code)->first();
 
-            // Valutiamo lo stato (usando la tabella document_status)
-            if ($latestDoc->status->is_ok && $latestDoc->status_code !== 'SCADUTO') {
+            // Valutiamo lo stato tramite l'enum DocumentStatus
+            $isValid = $latestDoc->status === DocumentStatus::VERIFIED
+                && !$latestDoc->isExpired();
+
+            if ($isValid) {
                 $validDocs[] = [
                     'code' => $code,
                     'document_id' => $latestDoc->id,
-                    'status' => $latestDoc->status_code,
+                    'status' => $latestDoc->status->value,
                     'expires_at' => $latestDoc->expires_at?->toDateString(),
                 ];
             } else {
                 $invalidDocs[] = [
                     'code' => $code,
                     'document_id' => $latestDoc->id,
-                    'status' => $latestDoc->status_code,
+                    'status' => $latestDoc->status->value,
                     'reason' => $this->getInvalidationReason($latestDoc),
                 ];
             }
@@ -91,12 +95,17 @@ class ComplianceController extends Controller
      */
     protected function getInvalidationReason(Document $document): string
     {
-        return match ($document->status_code) {
-            'SCADUTO' => 'Documento scaduto in data ' . $document->expires_at?->toDateString(),
-            'DA VERIFICARE', 'IN VERIFICA' => 'Documento in attesa di validazione da parte di un operatore',
-            'DIFFORME', 'ERRATO' => 'Documento rifiutato: ' . ($document->rejection_note ?? 'Nessuna nota specificata'),
-            'RICHIESTA INFO' => "Richieste informazioni aggiuntive all'utente",
-            default => 'Stato documento non idoneo: ' . $document->status_code,
+        if ($document->isExpired()) {
+            return 'Documento scaduto in data ' . $document->expires_at?->toDateString();
+        }
+
+        return match ($document->status) {
+            DocumentStatus::REJECTED => 'Documento rifiutato: ' . ($document->rejection_note ?? 'Nessuna nota specificata'),
+            DocumentStatus::REVOKED => 'Documento revocato',
+            DocumentStatus::EXPIRED => 'Documento scaduto',
+            DocumentStatus::UPLOADED => 'Documento in attesa di validazione da parte di un operatore',
+            DocumentStatus::PENDING => 'Documento in attesa di validazione da parte di un operatore',
+            default => 'Stato documento non idoneo: ' . $document->status->value,
         };
     }
 }

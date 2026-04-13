@@ -15,7 +15,7 @@ return new class extends Migration {
             $table->foreignUuid('document_id')->constrained('documents')->cascadeOnDelete();
 
             $table->foreignId('predicted_type_id')->nullable()->constrained('document_types');
-            $table->foreignId('actual_type_id')->constrained('document_types');
+            $table->foreignId('actual_type_id')->nullable()->constrained('document_types');
 
             $table->string('classifier_used')->default('ai');  // 'ai' o 'regex'
             $table->unsignedTinyInteger('confidence_score')->nullable();

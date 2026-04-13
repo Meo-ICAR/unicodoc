@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentRequest extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'id',
         'documentable_type',
@@ -17,12 +19,15 @@ class DocumentRequest extends Model
         'bpm_task_id',
         'status',
         'expires_at',
+        'has_unread_messages',
+        'last_message_received',
     ];
 
     protected $casts = [
         'id' => 'string',
         'documentable_id' => 'string',
         'expires_at' => 'datetime',
+        'has_unread_messages' => 'boolean',
     ];
 
     protected $dates = [
@@ -41,6 +46,11 @@ class DocumentRequest extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class, 'document_request_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(\App\Models\DocumentRequestItem::class, 'document_request_id');
     }
 
     public function isPending(): bool

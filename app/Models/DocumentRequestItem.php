@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Model;
 
 class DocumentRequestItem extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'document_request_id',
         'document_type_id',
@@ -23,6 +25,11 @@ class DocumentRequestItem extends Model
     public function documentRequest(): BelongsTo
     {
         return $this->belongsTo(DocumentRequest::class);
+    }
+
+    public function request(): BelongsTo
+    {
+        return $this->belongsTo(DocumentRequest::class, 'document_request_id');
     }
 
     public function documentType(): BelongsTo
