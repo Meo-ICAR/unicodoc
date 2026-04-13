@@ -22,6 +22,20 @@ class BpmIntegrationService
         ]);
     }
 
+    /*
+     * // In UnicoDoc (App di Document Management)
+     * Http::withToken('compliance-api-token')
+     *     ->post('https://compliance-app.internal/api/v1/integration/incoming-request', [
+     *         'unicodoc_id' => $registry->id,
+     *         'title' => $registry->subject,
+     *         'description' => $registry->body,
+     *         'metadata' => [
+     *             'company_id' => $registry->company_id,
+     *             'sender_name' => $registry->sender_name
+     *         ]
+     *     ]);
+     */
+
     /**
      * Recupera dati utente dal DB esterno restituendo un modello Eloquent.
      */
