@@ -60,6 +60,15 @@ class RequestRegistry extends Model
         'response_date',
     ];
 
+    /**
+     * Recupera i reclami dal database UnicoCompliance
+     */
+    public function complaints()
+    {
+        // Eloquent gestisce la query cross-database automaticamente
+        return $this->hasMany(Complaint::class, 'request_registry_id');
+    }
+
     public function dataSubject(): MorphTo
     {
         return $this->morphTo('data_subject');
