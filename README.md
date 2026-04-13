@@ -1,58 +1,121 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+Ecco una proposta per un `README.md` professionale, strutturato per comunicare il valore tecnico e funzionale di **UnicoDoc** sia a un utente business che a un team di sviluppo.
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+---
 
-## About Laravel
+# 📄 UnicoDoc — AI-Powered Document Compliance & Orchestration
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+> **Trasforma la gestione documentale passiva in un motore di compliance attivo.**
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+UnicoDoc è una piattaforma di gestione documentale di nuova generazione progettata per affiancare sistemi BPM complessi. Sviluppata con **Laravel 13** e **Filament 5.4**, automatizza l'intero ciclo di vita del documento: dall'ingestione multicanale alla classificazione tramite AI, fino alla verifica della compliance legale.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+---
 
-## Learning Laravel
+## 🚀 Caratteristiche Principali
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### 🤖 Classificazione Intelligente a Due Livelli
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Non perdere tempo con la selezione manuale. UnicoDoc utilizza un processo ibrido:
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+1.  **Regex First:** Riconoscimento istantaneo basato su pattern deterministici e metadati del file.
+2.  **AI Fallback:** Se la Regex fallisce, un motore di Vision/OCR (GPT-4o/Claude) analizza il contenuto per classificare il documento, estrarre abstract e fornire un punteggio di confidenza.
 
-## Agentic Development
+### 📧 Ingestione Omnicanale & Anti-Noise
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Dimentica il download manuale degli allegati dalle email.
 
-```bash
-composer require laravel/boost --dev
+- **Pipeline IMAP:** Sincronizzazione automatica delle caselle email aziendali.
+- **Filtro Anti-Rumore:** Ignora automaticamente loghi social, firme e icone (file < 8KB).
+- **Routing Contestuale:** Associa automaticamente le email in entrata alle pratiche aperte tramite Tag di tracciamento o indirizzo mittente.
 
-php artisan boost:install
+### 🔗 Dossier & Magic Links (Proactive Collection)
+
+Non aspettare che i documenti arrivino. Chiedili.
+
+- Genera **Dossier di richiesta** con scadenze predefinite.
+- Invia **Magic Links** sicuri che permettono ai clienti di caricare documenti in un portale dedicato senza registrazione.
+- Gestione delle **Eccezioni Conversazionali**: se il cliente risponde via email ponendo una domanda invece di allegare un file, il sistema lo segnala immediatamente all'operatore.
+
+### 🛡️ Compliance Gate API
+
+Un'interfaccia M2M (Machine-to-Machine) che permette al tuo BPM di interrogare UnicoDoc in tempo reale:
+
+- _"Il Cliente X ha un documento d'identità valido e non scaduto per procedere?"_
+- Risposta granulare con motivazioni in caso di non conformità.
+
+---
+
+## 🛠 Tech Stack
+
+- **Core:** Laravel 13 (PHP 8.4+)
+- **Admin Panel:** Filament 5.4 (TALL Stack: Tailwind, Alpine.js, Laravel, Livewire)
+- **Media Layer:** Spatie Media Library v11 (con supporto S3/SharePoint)
+- **Database:** MySQL (Architettura a Database Condiviso con BPM)
+- **AI Integration:** OpenAI / Anthropic / AWS Textract
+
+---
+
+## 📂 Architettura dei Dati
+
+Il sistema ruota attorno a un modello di **Proprietà Polimorfica**, permettendo di collegare documenti a qualsiasi entità del business:
+
+- **Aziende & Dipendenti** (HR/Certificazioni)
+- **Clienti B2C & B2B** (KYC/Contratti)
+- **Agenti & Mandanti** (Procure/Mandati)
+- **Organismi di Vigilanza** (Audit/Ispezioni)
+
+---
+
+## 🔧 Installazione & Vibe Coding
+
+UnicoDoc è ottimizzato per lo sviluppo rapido tramite **AI Agents** (Cursor, Cline, GitHub Copilot).
+
+1. **Clona il repository:**
+    ```bash
+    git clone https://github.com/your-org/unicodoc.git
+    ```
+2. **Configura le connessioni DB:**
+   Assicurati di mappare sia `mysql` (locale) che `mysql_bpm` (per le anagrafiche esterne) nel file `.env`.
+3. **Avvia il Sync:**
+    ```bash
+    php artisan mail:sync # Per l'ingestione IMAP
+    php artisan queue:work # Per la classificazione AI
+    ```
+
+---
+
+## 📑 Integrazione BPM (Esempio API)
+
+**Richiesta Compliance:**
+`POST /api/v1/compliance/check`
+
+```json
+{
+    "documentable_type": "client",
+    "documentable_id": 99,
+    "required_codes": ["KYC_ID", "TAX_CONFIRMATION"]
+}
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+**Risposta:**
 
-## Contributing
+```json
+{
+    "is_compliant": false,
+    "missing_documents": ["TAX_CONFIRMATION"],
+    "invalid_documents": {
+        "KYC_ID": "Documento scaduto il 01/01/2026"
+    }
+}
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## ⚖️ Compliance & Sicurezza
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- **Audit Log:** Ogni azione (umana o AI) è tracciata.
+- **GDPR Ready:** Gestione nativa delle scadenze e della cancellazione sicura.
+- **OOB Security:** PIN di accesso ai fascicoli inviati Out-of-Band (SMS/Email separate).
 
-## Security Vulnerabilities
+---
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+_UnicoDoc — Document Management, Reinvented._

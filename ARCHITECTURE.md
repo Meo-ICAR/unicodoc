@@ -1,181 +1,182 @@
-Ecco la specifica architetturale completa e aggiornata (Versione 1.1), arricchita con tutti i nuovi domini operativi, le pipeline di ingestion via email, le API per il BPM, i Dossier (Magic Links) e la gestione delle eccezioni conversazionali.
+# UnicoDoc — AI-Optimized Document Management Specification
+
+> Specification for integrating the BPM application with this separate Laravel 13 + Filament 5.4 document-management application that shares the same MySQL server and manages documents, classifications, inbound email ingestion, automated collection dossiers, and document metadata. **Optimized for Autonomous AI Code Generation (Vibe Coding).**
 
 ---
 
-# UnicoDoc — Document Management Integration Specification
+## 0. AI Vibe Coding Guidelines & Constraints
 
-> Specification for integrating the BPM application with this separate Laravel 13 + Filament 5.4 document-management application that shares the same MySQL server and manages documents, classifications, inbound email ingestion, automated collection dossiers, and document metadata.
+**CRITICAL INSTRUCTIONS FOR AI AGENT:**
 
----
-
-## Document Metadata
-
-- **Document version:** 1.1
-- **Last updated:** 2026-04-11
-- **Applies to:** external document-management application
-- **Framework target:** Laravel 13
-- **Admin target:** Filament 5.4
-- **Media layer:** Spatie Media Library
-- **Database topology:** shared MySQL server with logical application separation
+- **Tech Stack:** Laravel 13, PHP 8.4+, Filament 5.4, Livewire 3, Spatie Media Library v11+.
+- **PHP Features:** Strictly use Constructor Property Promotion, typed properties, strict return types, and native PHP 8.4 Enums for all states (`DocumentStatus`, `RequestStatus`).
+- **Filament Pattern:** Use standard Filament Resource classes. For complex verifications, use Action modals or custom Livewire components within the Resource view.
+- **Service Pattern:** Keep Controllers and Livewire components thin. Move heavy logic (Classification, IMAP syncing) into dedicated `app/Services/` or `app/Actions/`.
+- **Database:** Assume the database is shared with the BPM. Do NOT create Foreign Key constraints referencing tables outside of UnicoDoc (e.g., `users`, `companies`). Use logical ID indexing instead.
+- **Queues:** All IMAP ingestion, AI processing, and Webhook dispatching MUST be queued (`ShouldQueue`).
 
 ---
 
-## Purpose
+## 1. Document Metadata
 
-This specification describes this external document-management application that works alongside the BPM platform.
-
-This app is responsible for:
-
-- document storage and metadata management
-- omnichannel document ingestion (Manual, Guest Portal, Email IMAP)
-- document classification (regex-based first-pass recognition, AI-assisted enrichment)
-- proactive document collection (Magic Links / Dossiers)
-- document verification workflow and conversational exception handling
-- management of expiration, signature, and document validity states
-- compliance gating via REST API for the BPM application
-- document attachment to domain entities through a polymorphic relationship
-
-The BPM app and this document-management app are separate Laravel applications, but they operate on the same MySQL server and share compatible business concepts.
+- **Document version:** 1.2 (Vibe Coding Edition)
+- **Database topology:** Shared MySQL server with logical application separation (UnicoDoc prefix or specific schema boundaries).
 
 ---
 
-## Core Concepts & Domain Expansion
+## 2. Core Concepts & Domain Expansion
 
-### 1. Ownership Model (Polymorphic Entities)
+### Ownership Model (Polymorphic Entities)
 
-Documents are attached through a polymorphic relation (`documentable_type` and `documentable_id`). To fully support the corporate ecosystem, UnicoDoc recognizes the following operational domain entities:
+Documents are attached through a polymorphic relation (`documentable_type` and `documentable_id`).
+_Allowed `documentable_type` strings:_ `company`, `employee`, `client`, `agent`, `principal`, `regulatory_body`, `practice`.
 
-- **Company:** The tenant or main corporate entity.
-- **Employee:** Internal staff members. They serve as documentable owners for HR files, certifications, and internal training.
-- **Client:** Represents both B2C and B2B customers.
-    - `is_company = false`: Individual customers/private citizens.
-    - `is_company = true`: Professional consultants or external B2B service providers.
-- **Agent:** External commercial agents or brokers who operate on behalf of the company but are not employees.
-- **Principal:** An external entity (e.g., an insurance carrier or bank) that the company represents as a fiduciary or agent.
-- **RegulatoryBody:** External institutions (e.g., IVASS, OAM, GDPR Authority) that impose compliance requirements and "own" regulatory documents or inspection reports.
-- **Practice:** Specific transactional entities (e.g., a specific loan application or contract).
+### Explicit Enums
 
-### 2. Document Type (`document_types`)
+The AI must generate these native PHP Enums:
 
-The core classification table defining what kind of document the system recognizes, its lifecycle rules (expiration, signature), and the Regex/AI logic needed to auto-classify it. _This is a global, tenant-agnostic lookup table._
-
-### 3. Document Status (`document_status`)
-
-The canonical verification vocabulary (e.g., `DA VERIFICARE`, `OK`, `SCADUTO`, `DIFFORME`, `RICHIESTA INFO`).
-
-### 4. Document (`documents`)
-
-The core operational record representing the physical/logical document, linking the `documentable` owner, the `document_type`, the physical media (via Spatie), AI metadata, and its verification state.
+- `DocumentStatus`: `TO_VERIFY`, `APPROVED`, `EXPIRED`, `NON_COMPLIANT`, `INFO_REQUESTED`.
+- `DossierStatus`: `PENDING`, `PARTIAL`, `COMPLETED`, `EXPIRED`.
 
 ---
 
-## Proactive Collection (Dossiers & Magic Links)
+## 3. Data Dictionary (Strict Schema for Migrations)
 
-To transform UnicoDoc from a passive archive into an active collection engine, it implements the **Dossier System**. The BPM can request UnicoDoc to collect specific missing documents from a user.
+### `document_types` (Global Dictionary)
 
-### Data Models
+- `id`: ulid/bigIncrements
+- `code`: string (unique, e.g., 'KYC_ID', 'PAYSLIP')
+- `name`: string
+- `requires_signature`: boolean (default false)
+- `validity_days`: integer (nullable)
+- `regex_pattern`: string (nullable)
+- `ai_prompt_context`: text (nullable)
 
-**`document_requests`**
+### `documents` (Core Record)
 
-- `id`: UUID (serves as the secure Magic Link token).
-- `documentable_type` / `documentable_id`: Who needs to upload the documents.
-- `sender_email`: Target email for the request.
-- `bpm_process_id` / `bpm_task_id`: Tracking metadata to reply to the BPM.
-- `status`: `PENDING`, `PARTIAL`, `COMPLETED`, `EXPIRED`.
-- `has_unread_messages`: Boolean flag for conversational exceptions.
-- `last_message_received`: Text of the last email reply without attachments.
-- `expires_at`: Validity of the request.
+- `id`: uuid (Primary Key)
+- `documentable_type`: string
+- `documentable_id`: unsignedBigInteger
+- `document_type_id`: foreignId
+- `status`: string (Enum: DocumentStatus, default 'TO_VERIFY')
+- `source_app`: string (enum: 'manual', 'portal', 'email', 'bpm_api')
+- `ai_abstract`: json (nullable, stores extraction data)
+- `ai_confidence_score`: decimal(5,2) (nullable)
+- `expires_at`: date (nullable)
 
-**`document_request_items`**
+### `document_requests` (Dossier / Magic Link)
 
-- `document_request_id`: Link to the parent dossier.
-- `document_type_id`: The specific document required (e.g., KYC_ID).
-- `fulfilled_by_document_id`: Populated when the user successfully uploads the file.
+- `id`: uuid (Primary Key, used as Magic Link token)
+- `documentable_type`: string
+- `documentable_id`: unsignedBigInteger
+- `sender_email`: string
+- `bpm_process_id`: string (nullable)
+- `bpm_task_id`: string (nullable)
+- `status`: string (Enum: DossierStatus, default 'PENDING')
+- `has_unread_messages`: boolean (default false)
+- `last_message_received`: text (nullable)
+- `expires_at`: datetime
 
-### The Collection Flow
+### `document_request_items`
 
-1. **Creation:** BPM calls UnicoDoc API to create a `document_request` indicating the required `document_types`.
-2. **Delivery:** User receives an email with a secure Magic Link (`/dossier/{uuid}`).
-3. **Upload:** User accesses a Guest Livewire portal to upload the files.
-4. **Resolution:** Uploaded files are instantiated as `documents` (status: `DA VERIFICARE`), the request item is marked fulfilled, and UnicoDoc triggers a Webhook to the BPM upon completion.
-
----
-
-## Omnichannel Ingestion System (Email Pipeline)
-
-Since users often reply to automated emails with attachments instead of using the provided portal, UnicoDoc features a robust **IMAP Ingestion Pipeline** with Anti-Noise and Contextual Routing.
-
-### Data Models
-
-**`mail_accounts`**
-
-- `company_id`: Tenant owner.
-- `email`, `protocol`, `host`, `port`, `encryption`, `credentials` (encrypted).
-- `last_synced_at`.
-
-**`mail_messages` (The Buffer)**
-
-- `mail_account_id`, `message_id` (header ID to prevent duplicates).
-- `from`, `to`, `subject`, `body_text`.
-- `is_processed`: Boolean flag.
-
-**`mail_attachments`**
-
-- `mail_message_id`, `filename`, `mime_type`, `size`, `is_inline`.
-- `document_id`: Populated once converted into a real `document`.
-
-### The Pipeline Architecture
-
-1. **The Vacuum (`MailSyncService`):** A scheduled command connects to IMAP, downloading unseen emails into the buffer (`mail_messages` / `mail_attachments`).
-2. **Anti-Noise Filter:** Ignores useless files like `.gif` signatures, social logos (`< 8KB`), or inline images.
-3. **Context Routing:** The system searches the email subject for a tracking Tag (e.g., `[Ref: uuid]`) or checks the sender's email to associate the inbound email with an open `document_request`.
-4. **Document Creation & Classification:** Valid attachments are moved to `documents` with `source_app = 'email'` and passed to the Regex/AI pipeline for auto-classification.
-5. **Conversational Exceptions (`MailMessageProcessor`):** If a user replies _without_ attachments but with text (e.g., asking a question), the pipeline flags the associated `document_request` (`has_unread_messages = true`), saves the text, and fires a Webhook to the BPM to alert a human operator.
+- `id`: bigIncrements
+- `document_request_id`: foreignId (uuid)
+- `document_type_id`: foreignId
+- `fulfilled_by_document_id`: foreignId (uuid, nullable)
 
 ---
 
-## Classification Pipeline (Regex + AI)
+## 4. Omnichannel Ingestion System (Email Pipeline)
 
-The classification process is intentionally multi-step to optimize for speed, cost, and accuracy:
+**AI Agent Implementation Task:**
 
-1. **Regex First:** Deterministic matching using file name, structured metadata, and `document_types.regex_pattern`.
-2. **AI Second:** If Regex fails, an AI Classifier analyzes the file (via OCR/Vision) using `document_types.AiPattern`. AI provides the `document_type_id`, an `ai_abstract`, and an `ai_confidence_score`.
-3. **Fulfillment Listener:** If a document is auto-classified (e.g., AI says it's a KYC) and belongs to a user with an open Dossier waiting for a KYC, the system auto-links the document to the request item.
-4. **Human Verification:** Operators use Filament to review `DA VERIFICARE` documents, overriding or confirming the AI's choice.
+1.  Create `MailSyncCommand` (runs every 5 mins).
+2.  Use `php-imap` or `webklex/php-imap` to ingest emails into `mail_messages` table.
+3.  **Anti-Noise Rule:** Ignore attachments `< 8KB` and mime types `image/gif`.
+4.  **Routing Logic:** Regex match subject for `\[Ref:\s*([a-f0-9\-]{36})\]` to extract the `document_requests.id`.
+5.  If attachment exists -> Create `Document` -> Trigger `ClassifyDocumentJob`.
+6.  If NO attachment but body text exists -> Update `document_requests` (set `has_unread_messages = true`, update `last_message_received`) -> Dispatch `WebhookQuestionReceivedJob`.
 
 ---
 
-## BPM Integration Interfaces (Machine-to-Machine)
+## 5. Classification Pipeline (Regex + AI)
 
-The BPM App and UnicoDoc communicate via strictly defined REST APIs (secured via Laravel Sanctum) and Webhooks.
+**AI Agent Implementation Task (`DocumentClassifierService`):**
 
-### 1. Compliance Gate API (BPM -> UnicoDoc)
+- **Step 1:** Check `document_types` where `regex_pattern` is not null. Run `preg_match` against the file name. If match -> Link type, set confidence 100, return.
+- **Step 2 (Fallback):** If no regex match, trigger LLM API (e.g., OpenAI Vision / Anthropic).
+    - _Prompt logic:_ Inject the list of available `document_types.code` and the file context.
+    - _Expected output:_ Strict JSON `{ "type_code": "...", "confidence": 0.0-100.0, "abstract": {} }`.
+- **Step 3:** If matched to an open `document_requests`, update the corresponding `document_request_items.fulfilled_by_document_id`.
 
-Used by the BPM to check if an entity has valid documents to proceed with a workflow step.
+---
+
+## 6. Strict API Contracts (Machine-to-Machine)
+
+**AI Agent Instructions:** Use Laravel FormRequests for validation. Return strict JSON resources.
+
+### 1. Compliance Gate API
 
 - **Endpoint:** `POST /api/v1/compliance/check`
-- **Payload:** `documentable_type`, `documentable_id`, `required_codes` (array of document type codes).
-- **Response:** Evaluates the highest-priority document for each requested code. Returns `is_compliant: boolean`, grouped summaries (`valid_documents`, `missing_documents`, `invalid_documents` with reasons like "SCADUTO").
+- **Payload:**
+    ```json
+    {
+        "documentable_type": "client",
+        "documentable_id": 1234,
+        "required_codes": ["KYC_ID", "LIVELINESS_VIDEO"]
+    }
+    ```
+- **Response (200 OK):**
+    ```json
+    {
+        "is_compliant": false,
+        "valid_documents": { "KYC_ID": "uuid-here" },
+        "missing_documents": ["LIVELINESS_VIDEO"],
+        "invalid_documents": {}
+    }
+    ```
 
-### 2. Dossier Creation API (BPM -> UnicoDoc)
-
-Used to delegate document collection to UnicoDoc.
+### 2. Dossier Creation API
 
 - **Endpoint:** `POST /api/v1/requests`
-- **Payload:** Entity identifiers, `required_codes`, `sender_email`, `bpm_task_id`.
-- **Response:** Returns the generated `request_id` and the public `upload_url` (Magic Link) to be sent to the user.
+- **Payload:**
+    ```json
+    {
+        "documentable_type": "client",
+        "documentable_id": 1234,
+        "required_codes": ["PAYSLIP", "TAX_RETURN"],
+        "sender_email": "user@example.com",
+        "bpm_task_id": "task_890",
+        "expires_in_days": 7
+    }
+    ```
+- **Response (201 Created):**
+    ```json
+    {
+        "request_id": "uuid-1234-5678",
+        "upload_url": "https://unicodoc.app/dossier/uuid-1234-5678",
+        "status": "PENDING"
+    }
+    ```
 
-### 3. Webhooks (UnicoDoc -> BPM)
+### 3. Webhook Payloads (Outgoing)
 
-UnicoDoc pushes state changes back to the BPM so workflows can resume automatically:
+The AI must implement a `WebhookDispatchService` using Laravel's HTTP Client.
 
-- `document_request_completed`: Fired when all requested items in a Dossier are fulfilled.
-- `document_request_question_received`: Fired when the IMAP pipeline detects a textual reply from the user without valid attachments, requiring agent intervention.
+- **Event: Dossier Completed**
+    ```json
+    {
+        "event": "document_request_completed",
+        "bpm_task_id": "task_890",
+        "request_id": "uuid-1234-5678",
+        "timestamp": "2026-04-11T10:00:00Z"
+    }
+    ```
 
 ---
 
-## Summary of Architectural Tradeoffs
+### Perché queste aggiunte sono fondamentali per il Vibe Coding?
 
-- **Why Regex First, AI Second?** Regex is cheap, fast, and explainable. AI provides semantic fallback, metadata extraction, and conversational bridging.
-- **Why Shared `document_types`?** Classification vocabulary must be normalized across all tenants and workflows to ensure API reliability.
-- **Why a Separate App with the Same Database?** Document ingestion (IMAP), heavy file storage (Spatie), and AI processing have entirely different performance profiles and scaling needs than operational BPM workflows. Sharing the DB allows zero-latency data reads while decoupling the application logic.
+1. **Eliminazione delle scelte banali:** L'AI non ti chiederà se usare UUID o interi per i documenti, glielo abbiamo imposto. Non creerà tabelle pivot strane, sa esattamente come strutturare `document_requests`.
+2. **Standardizzazione degli I/O:** Avendo fornito i JSON esatti per le API, l'agente genererà i FormRequest e i JsonResource perfettamente aderenti a ciò che il BPM si aspetta, riducendo i bug di integrazione al minimo.
+3. **Task List implicita:** Leggendo le sezioni "AI Agent Implementation Task", l'editor sa in quale ordine procedere (es. prima l'infrastruttura Mail, poi le code, poi l'AI). Puoi letteralmente evidenziare la sezione 4 e dirgli: _"Implementa questo blocco"_.
