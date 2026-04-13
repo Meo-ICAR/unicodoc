@@ -39,6 +39,10 @@ return new class extends Migration {
             $table->boolean('is_AiAbstract')->default(0)->comment('Ask AI to make abstract');
             $table->boolean('is_AiCheck')->default(0)->comment('AI conformity required');
             $table->text('AiPattern')->nullable()->comment('How AI can detect document is of this type');
+            $table->unsignedTinyInteger('min_confidence')->default(70)->comment('Soglia minima per suggerire il tipo');
+            $table->boolean('allow_auto_verification')->default(false)->comment('Se true e confidence > 95, valida da solo');
+            $table->json('notify_days_before')->nullable()->comment('Es. [30, 15, 5] giorni prima');
+            $table->unsignedTinyInteger('retention_years')->nullable()->comment('GDPR retention policy');
             // Tracciamento Utenti (Audit)
             $table->unsignedBigInteger('created_by')->nullable();
             $table->unsignedBigInteger('updated_by')->nullable();

@@ -1,12 +1,16 @@
+Ecco la specifica architetturale completa e aggiornata (Versione 1.1), arricchita con tutti i nuovi domini operativi, le pipeline di ingestion via email, le API per il BPM, i Dossier (Magic Links) e la gestione delle eccezioni conversazionali.
+
+---
+
 # UnicoDoc — Document Management Integration Specification
 
-> Specification for integrating the BPM application with this separate Laravel 13 + Filament 5.4 document-management application that shares the same MySQL server and manages documents, classifications, and document metadata.
+> Specification for integrating the BPM application with this separate Laravel 13 + Filament 5.4 document-management application that shares the same MySQL server and manages documents, classifications, inbound email ingestion, automated collection dossiers, and document metadata.
 
 ---
 
 ## Document Metadata
 
-- **Document version:** 1.0
+- **Document version:** 1.1
 - **Last updated:** 2026-04-11
 - **Applies to:** external document-management application
 - **Framework target:** Laravel 13
@@ -23,694 +27,155 @@ This specification describes this external document-management application that 
 This app is responsible for:
 
 - document storage and metadata management
-- document classification
-- regex-based first-pass recognition
-- AI-assisted classification and enrichment
-- document verification workflow
+- omnichannel document ingestion (Manual, Guest Portal, Email IMAP)
+- document classification (regex-based first-pass recognition, AI-assisted enrichment)
+- proactive document collection (Magic Links / Dossiers)
+- document verification workflow and conversational exception handling
 - management of expiration, signature, and document validity states
+- compliance gating via REST API for the BPM application
 - document attachment to domain entities through a polymorphic relationship
 
 The BPM app and this document-management app are separate Laravel applications, but they operate on the same MySQL server and share compatible business concepts.
 
 ---
 
-## Integration Context
+## Core Concepts & Domain Expansion
 
-### Architectural Relationship
+### 1. Ownership Model (Polymorphic Entities)
 
-There are two related systems:
+Documents are attached through a polymorphic relation (`documentable_type` and `documentable_id`). To fully support the corporate ecosystem, UnicoDoc recognizes the following operational domain entities:
 
-1. **BPM / SOP application**
-    - manages processes, tasks, RACI, execution, compliance workflows
-2. **Document-management application**
-    - manages documents, classifications, extracted text, AI metadata, status lifecycle, and storage-related concerns
+- **Company:** The tenant or main corporate entity.
+- **Employee:** Internal staff members. They serve as documentable owners for HR files, certifications, and internal training.
+- **Client:** Represents both B2C and B2B customers.
+    - `is_company = false`: Individual customers/private citizens.
+    - `is_company = true`: Professional consultants or external B2B service providers.
+- **Agent:** External commercial agents or brokers who operate on behalf of the company but are not employees.
+- **Principal:** An external entity (e.g., an insurance carrier or bank) that the company represents as a fiduciary or agent.
+- **RegulatoryBody:** External institutions (e.g., IVASS, OAM, GDPR Authority) that impose compliance requirements and "own" regulatory documents or inspection reports.
+- **Practice:** Specific transactional entities (e.g., a specific loan application or contract).
 
-### Shared Business Goal
+### 2. Document Type (`document_types`)
 
-Together, the two systems enable:
+The core classification table defining what kind of document the system recognizes, its lifecycle rules (expiration, signature), and the Regex/AI logic needed to auto-classify it. _This is a global, tenant-agnostic lookup table._
 
-- document-driven process execution
-- compliance and privacy evidence management
-- automated document classification
-- document verification states
-- linking required document types to process steps and runtime activities
+### 3. Document Status (`document_status`)
 
-### Important Boundary
+The canonical verification vocabulary (e.g., `DA VERIFICARE`, `OK`, `SCADUTO`, `DIFFORME`, `RICHIESTA INFO`).
 
-The document-management app is the **source of truth for documents and their classification lifecycle**.
+### 4. Document (`documents`)
 
-The BPM app is the **source of truth for process orchestration and operational execution**.
-
----
-
-## Technology Assumptions for the App
-
-| Layer                   | Technology                                                    |
-| ----------------------- | ------------------------------------------------------------- |
-| Framework               | Laravel 13                                                    |
-| Admin Panel             | Filament 5.4                                                  |
-| Media Management        | Spatie Media Library                                          |
-| Database                | MySQL                                                         |
-| Audit / activity        | application-specific logging and/or Filament activity logging |
-| AI support              | document text extraction + AI classification/enrichment       |
-| Classification strategy | regex first, AI second                                        |
+The core operational record representing the physical/logical document, linking the `documentable` owner, the `document_type`, the physical media (via Spatie), AI metadata, and its verification state.
 
 ---
 
-## Core Concepts
+## Proactive Collection (Dossiers & Magic Links)
 
-### 1. Document Type
+To transform UnicoDoc from a passive archive into an active collection engine, it implements the **Dossier System**. The BPM can request UnicoDoc to collect specific missing documents from a user.
 
-The core classification table is `document_types`.
+### Data Models
 
-It defines:
+**`document_requests`**
 
-- what kind of document the system recognizes
-- which business context it belongs to
-- whether it applies to people, companies, agents, practices, etc.
-- whether the document is monitored for expiration
-- whether it should be signed
-- whether it is sensitive
-- whether AI abstraction or AI conformity checks are required
-- which regex or AI pattern can classify it
+- `id`: UUID (serves as the secure Magic Link token).
+- `documentable_type` / `documentable_id`: Who needs to upload the documents.
+- `sender_email`: Target email for the request.
+- `bpm_process_id` / `bpm_task_id`: Tracking metadata to reply to the BPM.
+- `status`: `PENDING`, `PARTIAL`, `COMPLETED`, `EXPIRED`.
+- `has_unread_messages`: Boolean flag for conversational exceptions.
+- `last_message_received`: Text of the last email reply without attachments.
+- `expires_at`: Validity of the request.
 
-`document_types` is a **global lookup table without tenant ownership**.
+**`document_request_items`**
 
-### 2. Document Status
+- `document_request_id`: Link to the parent dossier.
+- `document_type_id`: The specific document required (e.g., KYC_ID).
+- `fulfilled_by_document_id`: Populated when the user successfully uploads the file.
 
-The state of a document from an operational verification point of view is modeled in `document_status`.
+### The Collection Flow
 
-This defines whether a document is:
-
-- missing
-- pending review
-- under verification
-- accepted
-- rejected
-- expired
-- cancelled
-- waiting for additional information
-
-This is not just UI decoration; it is the canonical verification vocabulary for documents.
-
-### 3. Document
-
-The `documents` table stores the real document record and its metadata.
-
-It includes:
-
-- polymorphic ownership via `documentable_type` and `documentable_id`
-- company linkage where relevant
-- document classification
-- verification metadata
-- extracted text
-- AI summary / abstract
-- AI confidence score
-- synchronization metadata
-- expiration and issue dates
-- signature metadata
-- descriptive annotations
+1. **Creation:** BPM calls UnicoDoc API to create a `document_request` indicating the required `document_types`.
+2. **Delivery:** User receives an email with a secure Magic Link (`/dossier/{uuid}`).
+3. **Upload:** User accesses a Guest Livewire portal to upload the files.
+4. **Resolution:** Uploaded files are instantiated as `documents` (status: `DA VERIFICARE`), the request item is marked fulfilled, and UnicoDoc triggers a Webhook to the BPM upon completion.
 
 ---
 
-## Classification Pipeline
+## Omnichannel Ingestion System (Email Pipeline)
 
-The classification process is intentionally multi-step.
+Since users often reply to automated emails with attachments instead of using the provided portal, UnicoDoc features a robust **IMAP Ingestion Pipeline** with Anti-Noise and Contextual Routing.
 
-### Step 1 — Acquisition
+### Data Models
 
-When a document is acquired, uploaded, synced, or discovered:
+**`mail_accounts`**
 
-- a `documents` record is created
-- the document is linked to a polymorphic owner
-- initial metadata is stored
-- media storage is handled through Spatie Media Library or compatible storage logic
+- `company_id`: Tenant owner.
+- `email`, `protocol`, `host`, `port`, `encryption`, `credentials` (encrypted).
+- `last_synced_at`.
 
-### Step 2 — Regex Classification
+**`mail_messages` (The Buffer)**
 
-A regex-based pass attempts to identify the document type using:
+- `mail_account_id`, `message_id` (header ID to prevent duplicates).
+- `from`, `to`, `subject`, `body_text`.
+- `is_processed`: Boolean flag.
 
-- file name
-- extracted text
-- structured metadata
-- `document_types.regex` or `document_types.regex_pattern`
+**`mail_attachments`**
 
-Regex matching is the first-pass classifier because it is:
+- `mail_message_id`, `filename`, `mime_type`, `size`, `is_inline`.
+- `document_id`: Populated once converted into a real `document`.
 
-- deterministic
-- fast
-- explainable
-- low-cost
+### The Pipeline Architecture
 
-### Step 3 — AI Classification
-
-If regex is insufficient, ambiguous, or low-confidence:
-
-- AI is used to infer the likely `document_type`
-- AI may also generate:
-    - `ai_abstract`
-    - structured `metadata`
-    - conformity or semantic hints
-
-The fields supporting this include:
-
-- `document_types.is_AiAbstract`
-- `document_types.is_AiCheck`
-- `document_types.AiPattern`
-- `documents.ai_abstract`
-- `documents.ai_confidence_score`
-- `documents.metadata`
-- `documents.extracted_text`
-
-### Step 4 — Human Verification
-
-A user or staff member may then:
-
-- review the classification
-- verify correctness
-- reject the document
-- request additional information
-- confirm the final verification state
+1. **The Vacuum (`MailSyncService`):** A scheduled command connects to IMAP, downloading unseen emails into the buffer (`mail_messages` / `mail_attachments`).
+2. **Anti-Noise Filter:** Ignores useless files like `.gif` signatures, social logos (`< 8KB`), or inline images.
+3. **Context Routing:** The system searches the email subject for a tracking Tag (e.g., `[Ref: uuid]`) or checks the sender's email to associate the inbound email with an open `document_request`.
+4. **Document Creation & Classification:** Valid attachments are moved to `documents` with `source_app = 'email'` and passed to the Regex/AI pipeline for auto-classification.
+5. **Conversational Exceptions (`MailMessageProcessor`):** If a user replies _without_ attachments but with text (e.g., asking a question), the pipeline flags the associated `document_request` (`has_unread_messages = true`), saves the text, and fires a Webhook to the BPM to alert a human operator.
 
 ---
 
-## Status Model
+## Classification Pipeline (Regex + AI)
 
-## `document_status`
+The classification process is intentionally multi-step to optimize for speed, cost, and accuracy:
 
-The verification states are defined in `document_status`.
-
-### Known statuses
-
-| Status           | Meaning                           | is_ok | is_rejected |
-| ---------------- | --------------------------------- | ----- | ----------- |
-| `ASSENTE`        | Document not yet uploaded         | 0     | 0           |
-| `DA VERIFICARE`  | Uploaded and waiting for review   | 0     | 0           |
-| `IN VERIFICA`    | Being reviewed                    | 0     | 0           |
-| `OK`             | Verified and valid                | 1     | 0           |
-| `DIFFORME`       | Non-conforming / anomalous        | 0     | 1           |
-| `RICHIESTA INFO` | More information required         | 0     | 0           |
-| `ERRATO`         | Wrong document                    | 0     | 1           |
-| `ANNULLATO`      | Cancelled and must be re-uploaded | 0     | 1           |
-| `SCADUTO`        | Expired                           | 0     | 1           |
-
-### Design Notes
-
-- `document_status` is a lookup/reference table
-- `is_ok` and `is_rejected` provide semantic grouping
-- applications should prefer the canonical status vocabulary over free-text state naming
+1. **Regex First:** Deterministic matching using file name, structured metadata, and `document_types.regex_pattern`.
+2. **AI Second:** If Regex fails, an AI Classifier analyzes the file (via OCR/Vision) using `document_types.AiPattern`. AI provides the `document_type_id`, an `ai_abstract`, and an `ai_confidence_score`.
+3. **Fulfillment Listener:** If a document is auto-classified (e.g., AI says it's a KYC) and belongs to a user with an open Dossier waiting for a KYC, the system auto-links the document to the request item.
+4. **Human Verification:** Operators use Filament to review `DA VERIFICARE` documents, overriding or confirming the AI's choice.
 
 ---
 
-## Global Classification Model
+## BPM Integration Interfaces (Machine-to-Machine)
 
-## `document_types`
+The BPM App and UnicoDoc communicate via strictly defined REST APIs (secured via Laravel Sanctum) and Webhooks.
 
-`document_types` is the primary classification vocabulary.
+### 1. Compliance Gate API (BPM -> UnicoDoc)
 
-### Architectural Role
+Used by the BPM to check if an entity has valid documents to proceed with a workflow step.
 
-It is a **global, non-tenant table** that defines all recognized document categories.
+- **Endpoint:** `POST /api/v1/compliance/check`
+- **Payload:** `documentable_type`, `documentable_id`, `required_codes` (array of document type codes).
+- **Response:** Evaluates the highest-priority document for each requested code. Returns `is_compliant: boolean`, grouped summaries (`valid_documents`, `missing_documents`, `invalid_documents` with reasons like "SCADUTO").
 
-This is critical because:
+### 2. Dossier Creation API (BPM -> UnicoDoc)
 
-- classification consistency must be shared
-- regex and AI patterns should be reusable across tenants
-- document requirements can map to the same normalized type system
+Used to delegate document collection to UnicoDoc.
 
-### Key Fields
+- **Endpoint:** `POST /api/v1/requests`
+- **Payload:** Entity identifiers, `required_codes`, `sender_email`, `bpm_task_id`.
+- **Response:** Returns the generated `request_id` and the public `upload_url` (Magic Link) to be sent to the user.
 
-| Field                     | Meaning                                   |
-| ------------------------- | ----------------------------------------- |
-| `name`                    | Human-readable document type              |
-| `description`             | Additional explanation                    |
-| `code`                    | Mnemonic unique-like business code        |
-| `codegroup`               | Logical grouping of similar documents     |
-| `slug`                    | Stable unique identifier                  |
-| `regex_pattern` / `regex` | First-pass classification pattern         |
-| `priority`                | Matching or display priority              |
-| `phase`                   | Process phase or business phase           |
-| `is_person`               | Related to a person                       |
-| `is_company`              | Related to a company                      |
-| `is_employee`             | Related to an employee                    |
-| `is_agent`                | Related to an agent                       |
-| `is_principal`            | Related to a principal                    |
-| `is_client`               | Related to a client                       |
-| `is_practice`             | Related to a practice                     |
-| `is_signed`               | Signature required                        |
-| `is_monitored`            | Expiration or ongoing validity monitored  |
-| `duration`                | Validity duration in days                 |
-| `emitted_by`              | Issuing authority                         |
-| `is_sensible`             | Sensitive data indicator                  |
-| `is_template`             | Document is system-provided               |
-| `is_stored`               | Long-term/substitutive retention required |
-| `is_endmonth`             | Expiration approximated to end of month   |
-| `is_AiAbstract`           | AI should produce abstract                |
-| `is_AiCheck`              | AI conformity check required              |
-| `AiPattern`               | AI hint for identifying this type         |
+### 3. Webhooks (UnicoDoc -> BPM)
 
-### Example Families in the Dataset
+UnicoDoc pushes state changes back to the BPM so workflows can resume automatically:
 
-The provided data includes classes such as:
-
-- identity documents
-- tax/health cards
-- AML and privacy forms
-- transparency and regulatory documents
-- OAM / IVASS evidence
-- company registry documents
-- invoices and compensation communications
-- GDPR response/request documents
-- training, curriculum, and certification files
-
-This confirms that `document_types` is not narrow document storage metadata; it is a strategic domain classification model.
+- `document_request_completed`: Fired when all requested items in a Dossier are fulfilled.
+- `document_request_question_received`: Fired when the IMAP pipeline detects a textual reply from the user without valid attachments, requiring agent intervention.
 
 ---
 
-## Document Record Model
-
-## `documents`
-
-The `documents` table is the central operational record.
-
-### Core Responsibilities
-
-A document record must represent:
-
-- the physical or logical document instance
-- its owner through a polymorphic relationship
-- its classification
-- its verification state
-- its extracted and AI-generated metadata
-- its validity timeline
-- its upload / verification lineage
-- its sync state with external storage providers
-
-### Key Columns
-
-| Field                                   | Meaning                          |
-| --------------------------------------- | -------------------------------- |
-| `id`                                    | UUID primary key                 |
-| `company_id`                            | optional tenant owner            |
-| `documentable_type` / `documentable_id` | polymorphic owner                |
-| `document_type_id`                      | normalized classification        |
-| `name`                                  | document label/name              |
-| `status`                                | current document lifecycle state |
-| `expires_at`                            | expiration date                  |
-| `emitted_at`                            | issue date                       |
-| `docnumber`                             | document number                  |
-| `verified_at` / `verified_by`           | verification trace               |
-| `uploaded_by`                           | uploader                         |
-| `rejection_note`                        | reason for rejection             |
-| `annotation`                            | operator notes                   |
-| `description`                           | descriptive metadata             |
-| `url_document`                          | publication/source URL           |
-| `ai_abstract`                           | AI-generated summary             |
-| `ai_confidence_score`                   | confidence 0-100                 |
-| `extracted_text`                        | OCR/PDF extracted raw text       |
-| `metadata`                              | structured extracted metadata    |
-| `is_signed`                             | signature present                |
-| `collection`                            | Spatie media collection          |
-| `is_unique`                             | unique document in collection    |
-| `sharepoint_*`                          | external file sync metadata      |
-| `sync_status`                           | sync lifecycle                   |
-| `file_hash`                             | duplicate detection              |
-
-### Relationship Notes
-
-- the owner is polymorphic
-- `document_type_id` links to the global classification table
-- `company_id` is nullable because not every use case may require tenant ownership directly
-- `verified_by`, `uploaded_by`, and `user_id` link document behavior to users
-- soft-deletes are enabled via `deleted_at`
-
----
-
-## Ownership Model
-
-Documents are attached through a polymorphic relation:
-
-- `documentable_type`
-- `documentable_id`
-
-### Expected Owners
-
-From the current data and intended use, documents may belong to:
-
-- `Company`
-- `Client`
-- `Employee`
-- `Agent`
-- `Practice`
-- other future domain models
-
-This means the document app should treat document ownership as a reusable capability, not as a client-only or employee-only feature.
-
----
-
-## Multi-Tenancy Rules
-
-The external app is multi-tenant-aware, but not every table is tenant-owned.
-
-### Tenant-Owned Data
-
-Tables with `company_id` represent tenant-related runtime records.
-
-Example:
-
-- `documents`
-
-### Global Lookup Data
-
-Tables without `company_id` are shared lookup/reference tables and can be read by every company.
-
-Examples:
-
-- `document_types`
-- `document_status`
-
-### Important Rule
-
-Do not duplicate global document classifications per company unless a later extension explicitly introduces tenant overrides.
-
-The baseline architecture assumes:
-
-- one shared taxonomy of document types
-- one shared taxonomy of document statuses
-- tenant-scoped document instances where needed
-
----
-
-## Regex + AI Strategy
-
-The recommended operational strategy is:
-
-1. try deterministic regex classification first
-2. use AI only when needed or explicitly required
-3. persist both the selected document type and AI confidence/evidence
-4. allow manual review to override automation
-
-### Why This Strategy
-
-Regex provides:
-
-- speed
-- repeatability
-- easy debugging
-
-AI provides:
-
-- semantic fallback
-- fuzzy matching on low-quality inputs
-- metadata extraction
-- summary generation
-- conformity support
-
-### Recommendation
-
-The app should preserve enough evidence to explain why a classification happened:
-
-- regex matched?
-- which pattern?
-- AI classification result?
-- AI confidence?
-- manual override?
-
----
-
-## Verification Workflow
-
-The external app should support the following verification flow:
-
-1. document acquired
-2. classification attempted
-3. status moves to `DA VERIFICARE` or `IN VERIFICA`
-4. operator reviews
-5. operator sets:
-    - `OK`
-    - `DIFFORME`
-    - `ERRATO`
-    - `RICHIESTA INFO`
-    - `SCADUTO`
-    - `ANNULLATO`
-
-### Verification Metadata
-
-When verification occurs, persist:
-
-- `verified_at`
-- `verified_by`
-- `rejection_note` if needed
-- status transition
-- notes/annotations
-
----
-
-## Expiration and Monitoring Rules
-
-Some document types are monitored over time.
-
-This is driven mainly by `document_types`:
-
-- `is_monitored`
-- `duration`
-- `is_endmonth`
-
-### Expected Behavior
-
-If a document type is monitored:
-
-- expiration should be computed or tracked
-- document validity should be surfaced operationally
-- expired items should move toward `SCADUTO`
-- BPM or compliance workflows may react to that state
-
----
-
-## Signature and Template Semantics
-
-Some document types are not just uploaded files.
-
-The model also supports:
-
-- documents that must be signed
-- documents provided by the company/system as templates
-- unique collection rules
-
-Relevant fields include:
-
-- `is_signed`
-- `is_template`
-- `collection`
-- `is_unique`
-
-This means the external app is both:
-
-- a repository of collected documents
-- a manager of system-provided document templates
-
----
-
-## SharePoint / External Sync Semantics
-
-The schema supports SharePoint synchronization.
-
-Relevant fields:
-
-- `sharepoint_id`
-- `sharepoint_drive_id`
-- `sharepoint_etag`
-- `sync_status`
-
-### Suggested Meaning of `sync_status`
-
-- `local`
-- `syncing`
-- `synced`
-- `failed`
-
-### Integration Rule
-
-Storage sync concerns should not replace the normalized document record. The `documents` row remains the core application-level source of truth.
-
----
-
-## BPM Integration Guidance
-
-The BPM app should integrate with this external app at the conceptual level as follows.
-
-### 1. Required Documents per Process
-
-A BPM process or task may require one or more `document_types`.
-
-### 2. Runtime Evidence
-
-A `TaskExecution` may need to validate whether required documents of specific types exist and are in an acceptable status.
-
-### 3. Privacy/Compliance Linkage
-
-The classification model can help infer:
-
-- what kind of regulated data is present
-- whether the document is sensitive
-- whether expiry monitoring is required
-- whether the document satisfies a compliance gate
-
-### 4. Trigger Opportunities
-
-Possible BPM triggers include:
-
-- document uploaded
-- document classified
-- document verified as `OK`
-- document marked `DIFFORME`
-- document expired
-- additional information requested
-
----
-
-## Design Recommendations for the New App
-
-### Recommended Domain Separation
-
-Separate the new app into these concerns:
-
-1. **document taxonomy**
-    - `document_types`
-    - `document_status`
-2. **document lifecycle**
-    - upload, verification, expiration, rejection, sync
-3. **classification pipeline**
-    - regex matching
-    - AI matching
-    - manual override
-4. **document ownership**
-    - polymorphic attachment
-5. **storage/integration**
-    - Spatie media
-    - SharePoint sync
-6. **BPM/compliance integration**
-    - status gates
-    - required-document checks
-    - process triggers
-
-### Recommended Services
-
-- `DocumentClassifierService`
-- `RegexDocumentClassifier`
-- `AiDocumentClassifier`
-- `DocumentVerificationService`
-- `DocumentExpiryService`
-- `DocumentSyncService`
-- `DocumentTypeResolverService`
-
-### Recommended Events
-
-- `DocumentUploaded`
-- `DocumentClassified`
-- `DocumentClassificationFailed`
-- `DocumentVerified`
-- `DocumentRejected`
-- `DocumentExpired`
-- `DocumentSyncFailed`
-
----
-
-## Architectural Decisions and Tradeoffs
-
-### Why Shared `document_types`
-
-Because classification vocabulary should be normalized across tenants and workflows.
-
-### Why Regex First
-
-Because it is cheap, deterministic, explainable, and robust for many formal document names.
-
-### Why AI Second
-
-Because some documents are ambiguous, low-quality, or not classifiable by regex alone.
-
-### Why Polymorphic Ownership
-
-Because many business entities need document attachment, not just one.
-
-### Why Separate App
-
-Because document management has its own lifecycle, metadata model, storage concerns, and classification pipeline that would otherwise overload the BPM app.
-
-### Why Shared MySQL Server
-
-Because both apps need interoperable business data, but can still remain logically separated by application boundaries.
-
----
-
-## Minimal Implementation Contract for the New App
-
-The new app should assume:
-
-- Laravel 13
-- Filament 5.4
-- Spatie Media Library
-- same MySQL server as the BPM app
-- `document_types` as the canonical classification lookup table
-- `document_status` as the canonical verification-state lookup table
-- `documents` as the core document lifecycle table
-- regex-first and AI-second classification
-- polymorphic document ownership
-- support for expiration, signature, sync, and verification metadata
-
----
-
-## Summary
-
-The external document-management application is a **classification-centric, metadata-rich, multi-entity document platform** that complements the BPM application.
-
-Its core responsibilities are:
-
-- storing documents
-- classifying them using `document_types`
-- tracking lifecycle and validity through `documents` and `document_status`
-- enriching records with extracted text and AI output
-- managing verification and expiration
-- acting as the system of record for document evidence used by BPM and compliance workflows
-
-1. New Domain Models for ARCHITECTURE.md
-   You should add these to the Ownership Model or Core Concepts section:
-
-Employee: Internal staff members of the Company. They serve as documentable owners for HR files, certifications, and internal training.
-Client: Represents both B2C and B2B customers.
-is_company = false: Individual customers/private citizens.
-is_company = true: Professional consultants or external service providers.
-Agent: External commercial agents or brokers who operate on behalf of the company but are not employees.
-Principal: An external entity (e.g., an insurance carrier or bank) that the company represents as a fiduciary or agent.
-RegulatoryBody: External institutions (e.g., IVASS, OAM, GDPR Authority) that impose compliance requirements and "own" regulatory documents or inspection reports. 2. Suggested Models for Email Integration
-To enable reading and archiving company emails, I recommend adding these tables:
-
-mail_accounts
-Stores the connection details for company mailboxes.
-
-company_id: Tenant owner.
-email: The address (e.g., info@company.com).
-protocol: imap or graph (for Outlook/Office 365).
-host, port, encryption: Connection settings.
-credentials: Encrypted token or password.
-last_synced_at: To avoid re-scanning old mail.
-mail_messages
-A buffer table to store metadata before a document is officially "classified".
-
-mail_account_id: Source mailbox.
-message_id: Unique header ID to prevent duplicates.
-from, to, subject, body_text.
-is_processed: Boolean flag.
-mail_attachments
-Intermediary table for files found in emails.
-
-mail_message_id: Parent email.
-filename, mime_type, size.
-document_id: Nullable link to the documents table once it is successfully archived and classified.
-Implementation Tip
-In your Document model, use the source_app field to distinguish these:
-
-source_app = 'email'
-metadata (JSON) can then store the original sender_email and subject for the AI to use during the classification phase.
-Would you like me to provide a sample Laravel migration schema for any of these new tables?
+## Summary of Architectural Tradeoffs
+
+- **Why Regex First, AI Second?** Regex is cheap, fast, and explainable. AI provides semantic fallback, metadata extraction, and conversational bridging.
+- **Why Shared `document_types`?** Classification vocabulary must be normalized across all tenants and workflows to ensure API reliability.
+- **Why a Separate App with the Same Database?** Document ingestion (IMAP), heavy file storage (Spatie), and AI processing have entirely different performance profiles and scaling needs than operational BPM workflows. Sharing the DB allows zero-latency data reads while decoupling the application logic.

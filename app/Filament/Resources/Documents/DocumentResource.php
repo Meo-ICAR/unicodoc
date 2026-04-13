@@ -20,18 +20,18 @@ class DocumentResource extends Resource
     protected static ?string $model = Document::class;
 
     // ── Navigazione ──────────────────────────────────────────────────────────
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    // protected static ?string $navigationIcon = 'heroicon-o-document-text';
 
-    protected static ?string $navigationGroup = 'Gestione Documenti';
+    //  public static ?string $navigationGroup = 'Gestione Documenti';
 
-    protected static ?int $navigationSort = 1;
+    //  protected static ?int $navigationSort = 1;
 
-    protected static ?string $navigationLabel = 'Documenti';
+    //  protected static ?string $navigationLabel = 'Documenti';
 
     // ── Label modello ────────────────────────────────────────────────────────
-    protected static ?string $modelLabel = 'Documento';
+    //  protected static ?string $modelLabel = 'Documento';
 
-    protected static ?string $pluralModelLabel = 'Documenti';
+    //  protected static ?string $pluralModelLabel = 'Documenti';
 
     // ── Slug URL ─────────────────────────────────────────────────────────────
     protected static ?string $slug = 'documents';

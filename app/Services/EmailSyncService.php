@@ -2,12 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\BPM\Employee;
+use App\Models\BPM\User;
 use App\Models\Client;
-use App\Models\Employee;
 use App\Models\MailAccount;
 use App\Models\MailAttachment;
 use App\Models\MailMessage;
-use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -22,14 +22,14 @@ class EmailSyncService
     {
         // Example with imap_open or similar logic (conceptual for the sync flow)
         // In a real app, you'd iterate over messages from the IMAP client
-        
+
         // $client = $this->getImapClient($account);
         // $messages = $client->getUnseenMessages();
-        
+
         // foreach ($messages as $message) {
         //     $this->processMessage($account, $message);
         // }
-        
+
         $account->update(['last_synced_at' => now()]);
     }
 
@@ -51,9 +51,9 @@ class EmailSyncService
         ]);
 
         $this->routeMessage($mailMessage);
-        
+
         $this->extractAttachments($mailMessage, $incomingMessage);
-        
+
         return $mailMessage;
     }
 

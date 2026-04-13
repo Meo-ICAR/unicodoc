@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Models;
+namespace App\Models\BPM;
 
 use Filament\Models\Contracts\HasAvatar;
 use Filament\Models\Contracts\HasName;
