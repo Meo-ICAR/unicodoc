@@ -1041,6 +1041,32 @@ class DocumentTypeSeeder extends Seeder
                 'created_at' => '2026-03-22 07:14:23',
                 'updated_at' => '2026-03-22 07:18:34',
             ],
+            [
+                'id' => 84,
+                'name' => 'Regolamento informatico Uso accettabile di PC, account e dati aziendali',
+                'slug' => 'regolamento-informatico-uso-accettabile',
+                'priority' => 1,
+                'is_person' => 0,
+                'is_signed' => 0,
+                'is_monitored' => 0,
+                'is_company' => 1,
+                'regex' => '/regolamento.*informatico|uso.*accettabile|pc.*account.*dati/i',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 85,
+                'name' => 'Policy smart working Regole per il lavoro agile e la protezione dei dati fuori sede',
+                'slug' => 'policy-smart-working',
+                'priority' => 1,
+                'is_person' => 0,
+                'is_signed' => 0,
+                'is_monitored' => 0,
+                'is_company' => 1,
+                'regex' => '/policy.*smart.*working|lavoro.*agile|protezione.*dati.*fuori.*sede/i',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         foreach ($documentTypes as $documentType) {
